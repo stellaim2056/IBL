@@ -1,0 +1,8 @@
+ONE-api
+ibllib
+ibl-neuropixel
+svgutils
+figrid
+statsmodels
+umap
+sobol_seq
