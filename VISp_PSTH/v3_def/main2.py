@@ -81,37 +81,56 @@ def compute_SP(spike_raster, times, trials_df, response_window=(0,0.2)):
     - spike_raster: shape = [nNeurons, nTrials, nBins]
     - response_window: 자극 onset 후 반응을 측정할 시간 창 (초)
     - SP = (반응 확률 at contrast 100%) - (반응 확률 at contrast 0%)
+      단, contrast가 0%와 100%인 trial만 사용.
     """
     idx_window = (times >= response_window[0]) & (times < response_window[1])
     # 좌/우 trial의 contrast 중 유효한 값(한쪽만 값이 있음)
     contrast = trials_df[['contrastLeft', 'contrastRight']].max(axis=1).values
+    # SP에서는 contrast가 0 또는 1인 trial만 선택
     extreme_mask = (contrast == 0) | (contrast == 1)
     
     nNeurons = spike_raster.shape[0]
     sp_values = np.zeros(nNeurons)
     
     for neuron in range(nNeurons):
+        # response window 내 spike count 계산
         counts = np.sum(spike_raster[neuron][:, idx_window], axis=1)
         responses = (counts > 0).astype(float)
+        # 극단 trial (0% 또는 100% contrast)만 사용
         resp_extreme = responses[extreme_mask]
         contrast_extreme = contrast[extreme_mask]
-        p0 = np.mean(resp_extreme[contrast_extreme == 0]) if np.any(contrast_extreme==0) else np.nan
-        p1 = np.mean(resp_extreme[contrast_extreme == 1]) if np.any(contrast_extreme==1) else np.nan
+        # 0% 조건의 반응 확률
+        if np.any(contrast_extreme == 0):
+            p0 = np.mean(resp_extreme[contrast_extreme == 0])
+        else:
+            p0 = np.nan
+        # 100% 조건의 반응 확률
+        if np.any(contrast_extreme == 1):
+            p1 = np.mean(resp_extreme[contrast_extreme == 1])
+        else:
+            p1 = np.nan
         sp_values[neuron] = p1 - p0
     return sp_values
+
 
 def compute_DP(spike_raster, times, trials_df, response_window=(0,0.2)):
     """
     각 뉴런별로 DP (Detect Probability)를 계산.
     - hit (feedbackType == 1)와 miss (feedbackType == -1) trial에서 response window 내 spike count를 비교.
+    - 단, contrast가 0%와 100%인 trial은 제외하고 계산.
     - ROC AUC를 DP로 산출.
     """
     idx_window = (times >= response_window[0]) & (times < response_window[1])
+    # feedback 관련 정보
     feedback = trials_df['feedbackType'].values
-    hit_mask = (feedback == 1)
-    miss_mask = (feedback == -1)
-    valid_mask = hit_mask | miss_mask
-    
+    # trial의 contrast 값 (좌/우 중 최대값 사용)
+    contrast = trials_df[['contrastLeft', 'contrastRight']].max(axis=1).values
+    # hit/miss trial mask
+    fb_mask = (feedback == 1) | (feedback == -1)
+    # DP 계산을 위해 contrast가 0 또는 1인 trial은 제외
+    contrast_mask = (contrast != 0) & (contrast != 1)
+    valid_mask = fb_mask & contrast_mask
+
     nNeurons = spike_raster.shape[0]
     dp_values = np.zeros(nNeurons)
     
