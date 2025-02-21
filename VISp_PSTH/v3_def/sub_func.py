@@ -3,6 +3,9 @@ import matplotlib.pyplot as plt
 from pprint import pprint
 from scipy.ndimage import gaussian_filter1d
 
+import collections
+
+
 from brainbox.singlecell import bin_spikes
 
 from matplotlib import cm, colors
@@ -40,6 +43,12 @@ def save_file(file, save_path=None, save_title=None):
         np.save(save_filepath + ".npy", file)
     elif isinstance(file, plt.Figure):
         file.savefig(save_filepath + ".png")
+    elif isinstance(file, dict):
+        df = pd.DataFrame(file)
+        df.to_csv(save_filepath + ".csv")
+    elif isinstance(file, collections.abc.Mapping): # collections import
+        df = pd.DataFrame(dict(file))
+        df.to_csv(save_filepath + ".csv")
     else:
         print("save_file: 알 수 없는 타입이어서 별도 저장하지 않습니다.")
 

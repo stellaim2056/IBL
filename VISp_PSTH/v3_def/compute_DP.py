@@ -3,39 +3,40 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from sklearn.metrics import roc_auc_score
 
-def compute_DP(spike_raster, times, trials_df, response_window=(0, 0.2)):
-    """
-    각 뉴런별 DP (Detect Probability)를 계산합니다.
-    spike_raster: shape = [nNeurons, nTrials, nBins]
-    times: 각 bin의 시간 (예: -2초 ~ 4초)
-    trials_df: trials 정보가 들어있는 DataFrame (feedbackType 컬럼 필요; hit: 1, miss: -1)
-    response_window: 자극 onset 후 반응을 측정할 시간 창 (초)
-    """
-    # 반응창 내 시간 인덱스
-    idx_window = (times >= response_window[0]) & (times < response_window[1])
-    
-    # hit, miss trial 마스크 (hit: feedbackType==1, miss: feedbackType==-1)
-    feedback = trials_df['feedbackType'].values  # 예: 1 또는 -1
-    hit_mask = (feedback == 1)
-    miss_mask = (feedback == -1)
-    valid_mask = hit_mask | miss_mask  # hit 또는 miss인 trial만 사용
-    
-    nNeurons = spike_raster.shape[0]
-    dp_values = np.zeros(nNeurons)
-    
-    for neuron in range(nNeurons):
-        # 각 trial에서 response window 내 spike count 계산
-        counts = np.sum(spike_raster[neuron][:, idx_window], axis=1)
-        counts_valid = counts[valid_mask]
-        labels = feedback[valid_mask]
-        # roc_auc_score는 레이블을 0과 1로 사용하므로 hit:1, miss:0
-        labels_binary = (labels == 1).astype(int)
-        
-        # 만약 hit와 miss trial 모두 충분하지 않으면 NaN 처리
-        if len(np.unique(labels_binary)) < 2:
-            dp = np.nan
-        else:
-            dp = roc_auc_score(labels_binary, counts_valid)
-        dp_values[neuron] = dp
+import os
+import sys
+sys.path.append('VISp_PSTH/v3_def')
+from compute_spike_auc import compute_spike_auc
+from compute_mean_roc import compute_mean_roc
 
-    return dp_values
+def compute_dp(spike_raster, trials_df, mask_contrast, start_idx, end_idx):
+    """
+    DP(Detection Probability) 계산 및 Mean ROC Curve 생성.
+    """
+    n_neurons = spike_raster.shape[0]
+    dp_values = np.full(n_neurons, np.nan)
+    roc_curves = []
+
+    mask_hit = mask_contrast & (trials_df['feedbackType'] == 1)
+    mask_miss = mask_contrast & (trials_df['feedbackType'] == -1)
+
+    for i in range(n_neurons):
+        fr_hit = np.sum(spike_raster[i, mask_hit, start_idx:end_idx], axis=1) / (end_idx - start_idx)
+        fr_miss = np.sum(spike_raster[i, mask_miss, start_idx:end_idx], axis=1) / (end_idx - start_idx)
+
+        # dp_values[i], _, _ = compute_spike_auc(fr_hit, fr_miss)
+
+        # Hit/Miss 개수 맞추기
+        n_hit, n_miss = len(fr_hit), len(fr_miss)
+        if n_hit == 0 or n_miss == 0:
+            continue  # 한쪽 그룹이 없으면 계산 불가
+
+        min_trials = min(n_hit, n_miss)
+        fr_hit_balanced = np.random.choice(fr_hit, min_trials, replace=False)
+        fr_miss_balanced = np.random.choice(fr_miss, min_trials, replace=False)
+
+        dp_values[i], fpr, tpr = compute_spike_auc(fr_hit_balanced, fr_miss_balanced)
+        roc_curves.append((fpr, tpr))
+
+    mean_fpr, mean_tpr = compute_mean_roc(roc_curves)
+    return dp_values, (mean_fpr, mean_tpr)

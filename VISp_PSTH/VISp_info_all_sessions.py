@@ -32,18 +32,28 @@ brain_acronym = 'VISp'
 # 세션 검색 (atlas_acronym=brain_acronym)
 # 필요하면 query_type='remote' 제거 또는 추가 등으로 조정
 sessions = one.search(atlas_acronym=brain_acronym, query_type='remote')
+# list로 변환
+sessions = list(sessions)
+# 44번째 세션 제거
+sessions.pop(44)
 print(f"Found {len(sessions)} sessions for region: {brain_acronym}")
 
 # ---------------------------------------------------------------
 # 세션 반복
 # ---------------------------------------------------------------
+i = 1
 for eid in sessions:
-    print(f"\n=== [Session: {eid}] ===")
+    print(f"\n=== [Session:{i} {eid}] ===")
+    i += 1
 
     # 세션별 폴더 생성
     session_folder = os.path.join(save_path, eid)
-    os.makedirs(session_folder, exist_ok=True)
+    
+    # 폴더가 있을 경우 아래 코드 패스
+    # if os.path.exists(session_folder):
+    #     continue
 
+    os.makedirs(session_folder, exist_ok=True)
     # 세션 경로 저장
     session_path = str(one.eid2path(eid))
     with open(os.path.join(session_folder, "session_path.txt"), "w", encoding="utf-8") as f:
@@ -80,6 +90,9 @@ for eid in sessions:
         print(f"   -> Probe: {pid} ({label})")
         # probe마다 폴더 생성
         probe_folder = os.path.join(session_folder, label)
+        # 폴더가 있을 경우 아래 코드 패스
+        # if os.path.exists(probe_folder):
+        #     continue
         os.makedirs(probe_folder, exist_ok=True)
 
         # ONE을 통해 clusters 정보를 로드 (pykilosort collection)
